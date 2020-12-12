@@ -25,9 +25,9 @@ import torchvision.utils as vutils
 
 EPOCHS = 1
 batch_size = 5
-image_size = 256
+hr_image_size = 256
 workers = 4
-imagesizeLR = 64
+lr_image_size = 64
 testbatchsize = 32
 
 
@@ -45,9 +45,9 @@ def make_folder(path):
 	except FileExistsError:
 		print("{} folder already exists".format(path))
 
-realPath = os.path.join(os.path.abspath(os.getcwd()),'dataset')
-testPath = os.path.join(os.path.abspath(os.getcwd()),'test')
-genImagesPath = os.path.abspath(os.path.join(os.getcwd(), "genImagesE{}-B{}".format(EPOCHS, batch_size)))
+realPath = os.path.join(os.path.abspath(os.getcwd()),'data','train')
+testPath = os.path.join(os.path.abspath(os.getcwd()),'data', 'test')
+genImagesPath = os.path.abspath(os.path.join(os.getcwd(), "data","genImagesE{}-B{}".format(EPOCHS, batch_size)))
 make_folder(genImagesPath)
 SRImagesPath = os.path.abspath(os.path.join(genImagesPath, "SRImages"))
 make_folder(SRImagesPath)
@@ -57,8 +57,8 @@ make_folder(SRImagesPath)
 # Create the dataset
 dataset = dset.ImageFolder(root=realPath,
                            transform=transforms.Compose([
-                               transforms.Resize(image_size),
-                               transforms.CenterCrop(image_size),
+                               transforms.Resize(hr_image_size),
+                               transforms.CenterCrop(hr_image_size),
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
@@ -69,7 +69,7 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
 
 #-------------------------------------#      
 #Discriminator
-discriminator = SRDiscriminator.DNet(device,image_size).to(device)
+discriminator = SRDiscriminator.DNet(device,hr_image_size).to(device)
 #discriminator = SRDiscriminator.Discriminator().to(device)
 print("discriminator paramenters {}".format(discriminator))
 # Handle multi-gpu if desired
@@ -87,8 +87,8 @@ if (device.type == 'cuda') and (ngpu > 1):
     
 datasetTest = dset.ImageFolder(root=testPath,
                            transform=transforms.Compose([
-                               transforms.Resize(imagesizeLR),
-                               transforms.CenterCrop(imagesizeLR),
+                               transforms.Resize(lr_image_size),
+                               transforms.CenterCrop(lr_image_size),
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
@@ -123,7 +123,7 @@ for epoch in range(EPOCHS):
         if i > 5:
             break
         highOriginal = data[0].to(device)
-        lowOriginal = F.interpolate(highOriginal, size=(imagesizeLR, imagesizeLR), mode='nearest')
+        lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='nearest')
 
         
         #Generator training
@@ -176,8 +176,8 @@ for epoch in range(EPOCHS):
         print("batch:{},epoch:{},totalLoss{},totalGloss{}".format(i,epoch,totalLoss,totalGloss))
 
         
-        
-        if i == 10000:
+        '''
+        if i %5== 0:
             #print("totalLoss{},los{}".format(totalLoss,los))
             with torch.no_grad():
                 gen_batch = next(iter(datasetTest))
@@ -185,16 +185,16 @@ for epoch in range(EPOCHS):
                 plt.axis("off")
                 plt.title("test Images")
                 plt.imshow(np.transpose(vutils.make_grid(gen_batch[0][0:64], padding=5, normalize=True, pad_value = 1),(1,2,0)))
-                fig.savefig(os.path.join(os.path.abspath(os.getcwd()),'genImages/{}-trainimage-ts{}.png'.format(i,int(time.time()))))
+                fig.savefig(os.path.join(SRImagesPath,'{}-trainimage-ts{}.png'.format(i,int(time.time()))))
                 genbatch = gen_batch[0].to(device)
                 highgen = generator(genbatch)
                 fig = plt.figure(figsize=(8,8))
                 plt.axis("off")
                 plt.title("Generated Images")
                 plt.imshow(np.transpose(vutils.make_grid(highgen.cpu()[0:64], padding=5, normalize=True, pad_value = 1),(1,2,0)))
-                fig.savefig(os.path.join(os.path.abspath(os.getcwd()),'genImages/{}-trainSRimage-ts{}.png'.format(i,int(time.time()))))
+                fig.savefig(os.path.join(SRImagesPath,'{}-trainSRimage-ts{}.png'.format(i,int(time.time()))))
         
-       
+       '''
 
 
 
