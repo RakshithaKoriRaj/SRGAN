@@ -25,9 +25,9 @@ import torchvision.utils as vutils
 
 EPOCHS = 1
 batch_size = 5
-hr_image_size = 256
+hr_image_size = 512
 workers = 4
-lr_image_size = 64
+lr_image_size = 128
 testbatchsize = 32
 
 
@@ -94,7 +94,7 @@ datasetTest = dset.ImageFolder(root=testPath,
                            ]))
 # Create the dataloader
 dataloaderTest = torch.utils.data.DataLoader(datasetTest, batch_size=testbatchsize,
-                                         shuffle=False, num_workers=workers)
+                                         shuffle=False, num_workers=1)
 
 
 
@@ -114,16 +114,41 @@ VGGnet = models.vgg16_bn(pretrained=True).features.to(device)
 VGGnet.eval()
 for param in VGGnet.parameters():
     param.requires_grad = False
+
+#-------------------------------------#                
+print("Pre training the Generator ")
+low_res = []
+for epoch in range(2):
+    mean_generator_content_loss = 0.0
+
+    for i, data in enumerate(dataloader):
+        #if i > 5:
+         #   break
+        
+        # Downsample images to low resolution
+        for j in range(batch_size):
+            highOriginal = data[0].to(device)
+            lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
+
+        ######### Train generator #########
+        generator.zero_grad()
+
+        highgen = generator(lowOriginal) 
+        image_loss = loss_fuction_MSE(highgen, highOriginal)
+        image_loss.backward()
+        gOptimizer.step()
+        print("Pre-trained Generator: batch:{},epoch:{},MSELoss{}".format(i,epoch,image_loss))
+
     
     
 #-------------------------------------#                
 for epoch in range(EPOCHS):
     #for batch in range(0, len(dimageList), BATCH):
     for i, data in enumerate(dataloader):
-        if i > 5:
-            break
+        #if i > 5:
+         #   break
         highOriginal = data[0].to(device)
-        lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='nearest')
+        lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
 
         
         #Generator training
