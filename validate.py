@@ -64,15 +64,34 @@ make_folder(genImagesPath)
 SRImagesPath = os.path.abspath(os.path.join(genImagesPath, "SRImages"))
 make_folder(SRImagesPath)
 
+generator = SRGenerator.GNet(device).to(device)
+generator.load_state_dict(torch.load(opt.generatorWeights))
+generator.eval()
 
 
-# Create the dataset
+loss_fuction_BCE = nn.BCELoss()
+loss_fuction_MSE = nn.MSELoss()
+
+
+
+image_loss = 0.0
+perception_loss = 0.0
+totalGloss = 0.0
+
+VGGnet = models.vgg16_bn(pretrained=True).features.to(device)
+VGGnet.eval()
+for param in VGGnet.parameters():
+    param.requires_grad = False
+    
+    
+
+
 dataset = dset.ImageFolder(root=testPath,
                            transform=transforms.Compose([
                                transforms.Resize(hr_image_size),
                                transforms.CenterCrop(hr_image_size),
                                transforms.ToTensor(),
-                               #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                              # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
 # Create the dataloader
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=testbatchsize,
@@ -81,12 +100,7 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=testbatchsize,
 #-------------------------------------#
 #Generator
 #Generating images from noise
-generator = SRGenerator.GNet(device).to(device)
-print("generator paramenters {}".format(generator))
-# Handle multi-gpu if desired
-if (device.type == 'cuda') and (ngpu > 1):
-    generator = nn.DataParallel(generator, list(range(ngpu)))
-    
+
     
 normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     
@@ -97,53 +111,36 @@ scale = transforms.Compose([
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ])
 
-loss_fuction_BCE = nn.BCELoss()
-loss_fuction_MSE = nn.MSELoss()
-
-generator.load_state_dict(torch.load(opt.generatorWeights))
-generator.eval()
 
 image_loss = 0.0
 perception_loss = 0.0
 totalGloss = 0.0
 
-VGGnet = models.vgg16_bn(pretrained=True).features.to(device)
-VGGnet.eval()
-for param in VGGnet.parameters():
-    param.requires_grad = False
-lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
+
 #-------------------------------------#                
 #for batch in range(0, len(dimageList), BATCH):
 for i, data in enumerate(dataloader):
-   # if i > 5:
-    #    break
-    #highOriginal = data[0].to(device)
-    #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
-    #lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
-    #for j in range(testbatchsize):
-    #    lowOriginal[j] = scale(highOriginal[j])
-    #    highOriginal[j]=normalize(highOriginal[j])
-    print("i---->{}".format(i))
     highOriginal = data[0]
-    #lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
-    for j in range(batch_size):
+    #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
+    lowOriginal = torch.FloatTensor(highOriginal.shape[0], 3, lr_image_size, lr_image_size)
+    for j in range(testbatchsize):
         lowOriginal[j] = scale(highOriginal[j])
         highOriginal[j]=normalize(highOriginal[j])
+    highOriginal = highOriginal.to(device)
+    lowOriginal = lowOriginal.to(device)
     #Generator training
     with torch.no_grad():
-    	highgen = generator(lowOriginal) 
-    
-    
+    	highgen = generator(lowOriginal)
     	vgg_highgenfeature = VGGnet(highgen.detach())
     	vgg_highfeature = VGGnet(highOriginal)
     	perception_loss += loss_fuction_MSE(vgg_highgenfeature, vgg_highfeature)
     	image_loss += loss_fuction_MSE(highgen, highOriginal)
     	totalGloss += (image_loss+0.006*perception_loss)
     
-    for j, hr_image in enumerate(highOriginal):
+    for j, hr_image in enumerate(highOriginal.cpu()):
         vutils.save_image(hr_image,os.path.join(SRImagesPath,'{}-{}-HRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
 
-    for j, lr_image in enumerate(lowOriginal):
+    for j, lr_image in enumerate(lowOriginal.cpu()):
         vutils.save_image(lr_image,os.path.join(SRImagesPath,'{}-{}-LRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
 
     for j, sr_image in enumerate(highgen.cpu()):
