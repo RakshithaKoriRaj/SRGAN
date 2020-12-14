@@ -60,7 +60,7 @@ dataset = dset.ImageFolder(root=realPath,
                                transforms.Resize(hr_image_size),
                                transforms.CenterCrop(hr_image_size),
                                transforms.ToTensor(),
-                               #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                              # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
 # Create the dataloader
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -90,10 +90,10 @@ datasetTest = dset.ImageFolder(root=testPath,
                                transforms.Resize(lr_image_size),
                                transforms.CenterCrop(lr_image_size),
                                transforms.ToTensor(),
-                               #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                              # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
 normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    
+
 scale = transforms.Compose([
                                transforms.ToPILImage(),
                                transforms.Resize(lr_image_size),
@@ -108,8 +108,8 @@ dataloaderTest = torch.utils.data.DataLoader(datasetTest, batch_size=testbatchsi
 
 loss_fuction_BCE = nn.BCELoss()
 loss_fuction_MSE = nn.MSELoss()
-gOptimizer = optim.Adam(generator.parameters())
-dOptimizer = optim.Adam(discriminator.parameters())
+gOptimizer = optim.Adam(generator.parameters(),lr=0.0002, betas=(0.5, 0.999))
+dOptimizer = optim.Adam(discriminator.parameters(),lr=0.0002, betas=(0.5, 0.999))
 
 errG = []
 errD = []
@@ -134,11 +134,14 @@ for epoch in range(2):
         #    break
         
         # Downsample images to low resolution
-        highOriginal = data[0].to(device)
-        lowOriginal = torch.FloatTensor(batch_size, 3, lr_image_size, lr_image_size)
+        highOriginal = data[0]
+        #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
+        lowOriginal = torch.FloatTensor(highOriginal.shape[0], 3, lr_image_size, lr_image_size)
         for j in range(batch_size):
             lowOriginal[j] = scale(highOriginal[j])
             highOriginal[j]=normalize(highOriginal[j])
+        highOriginal = highOriginal.to(device)
+        lowOriginal = lowOriginal.to(device)
 
         ######### Train generator #########
         generator.zero_grad()
@@ -155,15 +158,22 @@ for epoch in range(2):
 for epoch in range(EPOCHS):
     #for batch in range(0, len(dimageList), BATCH):
     for i, data in enumerate(dataloader):
-        if i > 2:
-            break
-        highOriginal = data[0].to(device)
+       # if i > 2:
+        #    break
+        #highOriginal = data[0].to(device)
         #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
-        lowOriginal = torch.FloatTensor(batch_size, 3, lr_image_size, lr_image_size)
+        #lowOriginal = torch.FloatTensor(batch_size, 3, lr_image_size, lr_image_size).to(device)
+        #for j in range(batch_size):
+        #    lowOriginal[j] = scale(highOriginal[j])
+        #    highOriginal[j]=normalize(highOriginal[j])
+        highOriginal = data[0]
+        lowOriginal = torch.FloatTensor(highOriginal.shape[0], 3, lr_image_size, lr_image_size)
         for j in range(batch_size):
             lowOriginal[j] = scale(highOriginal[j])
             highOriginal[j]=normalize(highOriginal[j])
-        
+        highOriginal = highOriginal.to(device)
+        lowOriginal = lowOriginal.to(device)
+        #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
         #Generator training
         highgen = generator(lowOriginal) 
         
@@ -274,15 +284,72 @@ fig.savefig(os.path.join(SRImagesPath,'gen_graph-losses{}.png'.format(int(time.t
 
 
 
-'''
-with torch.no_grad():
-    for i, data in enumerate(dataloaderTest):
-        test_batch = data[0].to(device)
-        for j, lr_image in enumerate(test_batch):
-            vutils.save_image(lr_image,os.path.join(SRImagesPath,'{}-LRimage-ts{}.png'.format(j,int(time.time()))),normalize=True)
-        highgen = generator(test_batch)
-        for j, sr_image in enumerate(highgen.cpu()):
-            vutils.save_image(sr_image,os.path.join(SRImagesPath,'{}-SRimage-ts{}.png'.format(j,int(time.time()))),normalize=True)
+dataset = dset.ImageFolder(root=testPath,
+                           transform=transforms.Compose([
+                               transforms.Resize(hr_image_size),
+                               transforms.CenterCrop(hr_image_size),
+                               transforms.ToTensor(),
+                              # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                           ]))
+# Create the dataloader
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=testbatchsize,
+                                         shuffle=True, num_workers=workers)
+   
+#-------------------------------------#
+#Generator
+#Generating images from noise
+
     
-''' 
+normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     
+scale = transforms.Compose([
+                               transforms.ToPILImage(),
+                               transforms.Resize(lr_image_size),
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                           ])
+
+
+image_loss = 0.0
+perception_loss = 0.0
+totalGloss = 0.0
+
+
+#-------------------------------------#                
+#for batch in range(0, len(dimageList), BATCH):
+for i, data in enumerate(dataloader):
+    highOriginal = data[0]
+    #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
+    lowOriginal = torch.FloatTensor(highOriginal.shape[0], 3, lr_image_size, lr_image_size)
+    for j in range(testbatchsize):
+        lowOriginal[j] = scale(highOriginal[j])
+        highOriginal[j]=normalize(highOriginal[j])
+    highOriginal = highOriginal.to(device)
+    lowOriginal = lowOriginal.to(device)
+    #Generator training
+    with torch.no_grad():
+    	highgen = generator(lowOriginal)
+    	vgg_highgenfeature = VGGnet(highgen.detach())
+    	vgg_highfeature = VGGnet(highOriginal)
+    	perception_loss += loss_fuction_MSE(vgg_highgenfeature, vgg_highfeature)
+    	image_loss += loss_fuction_MSE(highgen, highOriginal)
+    	totalGloss += (image_loss+0.006*perception_loss)
+    
+    for j, hr_image in enumerate(highOriginal.cpu()):
+        vutils.save_image(hr_image,os.path.join(SRImagesPath,'{}-{}-HRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
+
+    for j, lr_image in enumerate(lowOriginal.cpu()):
+        vutils.save_image(lr_image,os.path.join(SRImagesPath,'{}-{}-LRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
+
+    for j, sr_image in enumerate(highgen.cpu()):
+        vutils.save_image(sr_image,os.path.join(SRImagesPath,'{}-{}-SRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
+
+        
+totalGloss = totalGloss/len(dataloader)
+image_loss = image_loss/len(dataloader)
+perception_loss = perception_loss/len(dataloader)
+
+
+print("Generator loss {}".format(totalGloss))
+print("image loss {}".format(image_loss))  
+print("perception loss {}".format(perception_loss))

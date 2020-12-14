@@ -30,8 +30,8 @@ EPOCHS = cg.EPOCHS
 hr_image_size = cg.hr_image_size
 workers = cg.workers
 lr_image_size = cg.lr_image_size
-testbatchsize = cg.testbatchsize
-
+testbatchsize = cg.batch_size
+batch_size = testbatchsize 
 parser = argparse.ArgumentParser()
 gen_model_path = os.path.join(os.path.abspath(os.getcwd()),'models',"generator_model_lr_{}_hr_{}.pt".format(lr_image_size,hr_image_size))
 parser.add_argument('--generatorWeights', type=str, default=gen_model_path, help="path to generator weights (to continue training)")
@@ -47,7 +47,7 @@ print(opt)
 ngpu = 1
 
 # Decide on which device we want to run on
-device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
+device =torch.device("cpu")
 
 def make_folder(path):
 	try:
@@ -111,28 +111,34 @@ VGGnet = models.vgg16_bn(pretrained=True).features.to(device)
 VGGnet.eval()
 for param in VGGnet.parameters():
     param.requires_grad = False
-
+lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
 #-------------------------------------#                
 #for batch in range(0, len(dimageList), BATCH):
 for i, data in enumerate(dataloader):
-    if i > 5:
-        break
-    highOriginal = data[0].to(device)
+   # if i > 5:
+    #    break
+    #highOriginal = data[0].to(device)
     #lowOriginal = F.interpolate(highOriginal, size=(lr_image_size, lr_image_size), mode='bicubic')
-    lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
-    for j in range(testbatchsize):
+    #lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
+    #for j in range(testbatchsize):
+    #    lowOriginal[j] = scale(highOriginal[j])
+    #    highOriginal[j]=normalize(highOriginal[j])
+    print("i---->{}".format(i))
+    highOriginal = data[0]
+    #lowOriginal = torch.FloatTensor(testbatchsize, 3, lr_image_size, lr_image_size)
+    for j in range(batch_size):
         lowOriginal[j] = scale(highOriginal[j])
         highOriginal[j]=normalize(highOriginal[j])
-    
     #Generator training
-    highgen = generator(lowOriginal) 
+    with torch.no_grad():
+    	highgen = generator(lowOriginal) 
     
     
-    vgg_highgenfeature = VGGnet(highgen.detach())
-    vgg_highfeature = VGGnet(highOriginal)
-    perception_loss += loss_fuction_MSE(vgg_highgenfeature, vgg_highfeature)
-    image_loss += loss_fuction_MSE(highgen, highOriginal)
-    totalGloss += (image_loss+0.006*perception_loss)
+    	vgg_highgenfeature = VGGnet(highgen.detach())
+    	vgg_highfeature = VGGnet(highOriginal)
+    	perception_loss += loss_fuction_MSE(vgg_highgenfeature, vgg_highfeature)
+    	image_loss += loss_fuction_MSE(highgen, highOriginal)
+    	totalGloss += (image_loss+0.006*perception_loss)
     
     for j, hr_image in enumerate(highOriginal):
         vutils.save_image(hr_image,os.path.join(SRImagesPath,'{}-{}-HRimage-ts{}.png'.format(i,j,int(time.time()))),normalize=True)
