@@ -17,5 +17,7 @@ Report is available in SRGAN.pdf
 Group Members:
 
 Rakshitha Raj
+
 Omkar Bhise
+
 Avinash Kharche
